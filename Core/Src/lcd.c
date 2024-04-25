@@ -1,36 +1,68 @@
 /*
- * lcd.c
+/*******************************************************************************
+ * @file           : lcd.c
+ * @brief          : lcd configuration and commands
+ * project         : EE 329 S'24 Assignment 3
+ * author(s)       : Bradley Buzzini - Logan Tom
+ * version         : 0.2
+ * date            : 240424
+ * compiler        : STM32CubeIDE v.1.15.0 Build: 20695_20240315_1429 (UTC)
+ * target          : NUCLEO-L496ZG
+ * clocks          : 4 MHz MSI to AHB2
+ * @attention      : (c) 2024 STMicroelectronics.  All rights reserved.
+ *******************************************************************************
+ * LCD PLAN:
+ * send initialization commands
+ * add function to enable commands
+ * add different functions for different command types
+ * add #defines for different commands
+ *******************************************************************************
+ * LCD WIRING 4-BIT CONFIGURATION (pinout NUCLEO-L496ZG = L4A6ZG)
+ *      peripheral – Nucleo I/O
+ * lcd 4  RS - PA4 = CN7 - 10 - OUT, PD ON
+ * lcd 6  E  - PA5 = CN7 - 9  - OUT, PD ON
+ * lcd 11 DB4- PA0 = CN10- 29 - OUT, PD ON
+ * lcd 12 DB5- PA1 = CN10- 11 - OUT, PD ON
+ * lcd 13 DB6- PA2 = CN10- 13 - OUT, PD ON
+ * lcd 14 DB7- PA3 = CN9 - 1  - OUT, PD ON
  *
- *  Created on: Apr 22, 2024
- *      Author: bradl
- *
- *  IMPORTANT NOTES: *************
- *  	Sample code provided for commands will only work if
- *  	DB11-DB14 are 0,1,2,3 for whatever GPIO pins you are using
- *  	because of how data is written to the ODR
+ * Note: DB pins must be lowest 4 of port
+ *******************************************************************************
+ * REVISION HISTORY
+ * 0.1 240422 BB  Printed first character
+ * 0.2 240424 BB  Includes requirements for A3
+ *******************************************************************************
  */
+
+/* Notes on use of commands */
+//	//Clear display sometimes breaks other commands and LCD
+//	LCD_command(CLEAR_HOME);	// BE CAREFUL
+//	delay_us( 1000 );			// include long delay to fix
+
+
+//	//Temporary code to replicate CLEAR_HOME command (if desired)
+//	LCD_command(RETURN_HOME);
+//	LCD_write_string("                ");
+//	LCD_command(LINE_TWO);
+//	LCD_write_string("                ");
+//	LCD_command(RETURN_HOME);
+
 
 #include "lcd.h"
 #include "delay.h"
 
-#include "stm32l496xx.h"
-
-//#include <stdint.h> //included in lcd.h
-//#include <stdio.h>
-
-
+#include "stm32l496xx.h"	// To write to GPIO registers
 
 
 //COMMANDS ONLY WORK IF GPIO LCD DB PINS ARE 0,1,2,3
 
 
-
-// ------------------------------------------------------ excerpt from lcd.c ---
-void LCD_init( void )  {   // RCC & GPIO config removed - leverage A1, A2 code
-
+void LCD_init( void )  {
+	// RCC & GPIO config for LCD port and pins
 	RCC->AHB2ENR |= (LCD_PORT_CLOCK);
-	uint32_t lcd_pins[] = LCD_PINS;
+
 	//Set pins to outputs
+	uint32_t lcd_pins[] = LCD_PINS;
 	for (uint32_t i = 0; i < LCD_NUM ; i++) {
 		uint32_t pin = lcd_pins[i];
 		LCD_PORT->MODER &= ~(0x3 << (pin * 2));
@@ -40,75 +72,106 @@ void LCD_init( void )  {   // RCC & GPIO config removed - leverage A1, A2 code
 		LCD_PORT->OSPEEDR &= ~(0x3 << (pin * 2));
 		LCD_PORT->OSPEEDR |= (0x3 << (pin * 2));//Highest speed
 		LCD_PORT->PUPDR &= ~(0x3 << (pin * 2));
-		LCD_PORT->PUPDR |= (0x2 << (pin * 2));	//push/pull and PULL DOWN (no false highs)
+		LCD_PORT->PUPDR |= (0x2 << (pin * 2));	//PULL DOWN (no false highs)
 		LCD_PORT->BRR |= (0x1 << (pin * 1));	//initialize off
 	}
 
-	delay_us( 40000 );                     // power-up wait 40 ms
-   for ( int idx = 0; idx < 3; idx++ ) {  // wake up 1,2,3: DATA = 0011 XXXX
-      LCD_4b_command( 0x30 );             // HI 4b of 8b cmd, low nibble = X
-      delay_us( 200 );
-   }
-   LCD_4b_command( 0x20 ); // fcn set #4: 4b cmd set 4b mode - next 0x28:2-line
-   delay_us( 40 );         // remainder of LCD init removed - see LCD datasheets
-   LCD_command( 0x28 );		//Selects 2-line mode instead of 1-line
-   LCD_command( 0x10 );		//Shift cursor to the left
-   LCD_command( 0x0F );		//Display, cursor, cursor position on
-   LCD_command( 0x06 );		//Cursor moves right, no shift
+	delay_us( 40000 );                     	// power-up wait 40 ms
+	for ( int idx = 0; idx < 3; idx++ ) {  	// wake up 1,2,3: DATA = 0011 XXXX
+		LCD_4b_command( 0x30 );             // HI 4b of 8b cmd, low nibble = X
+		delay_us( 200 );
+	}
+	LCD_4b_command( 0x20 ); 		// fcn set #4: 4b cmd set 4b mode
+	delay_us( 40 );         		// remainder of LCD init removed
+	LCD_command( 0x28 );			//Selects 2-line mode instead of 1-line
+	LCD_command( 0x10 );			//Shift cursor to the left
+	LCD_command( CURSOR_ON );		//Display, cursor, cursor position on
+	LCD_command( CURSOR_RIGHT );	//Cursor moves right, no shift
 }
 
-
 void LCD_pulse_ENA( void )  {
-// ENAble line sends command on falling edge
-// set to restore default then clear to trigger
-   LCD_PORT->ODR   |= ( LCD_EN );         	// ENABLE = HI
-   delay_us( 100 );                         // TDDR > 320 ns
-   LCD_PORT->ODR   &= ~( LCD_EN );        // ENABLE = LOW
-   delay_us( 100 );                         // low values flakey, see A3:p.1
+	// ENAble line sends command on falling edge
+	// set to restore default then clear to trigger
+	LCD_PORT->ODR   |= ( LCD_EN );         	// ENABLE = HI
+	delay_us( 100 );                         // TDDR > 320 ns
+	LCD_PORT->ODR   &= ~( LCD_EN );        // ENABLE = LOW
+	delay_us( 100 );                         // low values flakey, see A3:p.1
 }
 
 void LCD_4b_command( uint8_t command )  {
-// LCD command using high nibble only - used for 'wake-up' 0x30 commands
-   LCD_PORT->ODR   &= ~( LCD_DATA_BITS ); 	// clear DATA bits
-   LCD_PORT->ODR   |= ( command >> 4 );   // DATA = command
-   delay_us( 100 );
-   LCD_pulse_ENA( );
+	// LCD command using high nibble only - used for 'wake-up' 0x30 commands
+	LCD_PORT->ODR   &= ~( LCD_DATA_BITS ); 	// clear DATA bits
+	LCD_PORT->ODR   |= ( command >> 4 );   	// DATA = command
+	delay_us( 100 );
+	LCD_pulse_ENA( );						//send
 }
 
 void LCD_command( uint8_t command )  {
-// send command to LCD in 4-bit instruction mode
-// HIGH nibble then LOW nibble, timing sensitive
-   LCD_PORT->ODR   &= ~( LCD_DATA_BITS );               // isolate cmd bits
-   LCD_PORT->ODR   |= ( (command>>4) & LCD_DATA_BITS ); // HIGH shifted low
-   delay_us( 100 );
+	// send command to LCD in 4-bit instruction mode
+	// HIGH nibble then LOW nibble, timing sensitive
+	LCD_PORT->ODR   &= ~( LCD_DATA_BITS );               // isolate cmd bits
+	LCD_PORT->ODR   |= ( (command>>4) & LCD_DATA_BITS ); // HIGH shifted low
+	delay_us( 100 );
 
-   LCD_pulse_ENA( );                                    // latch HIGH NIBBLE
+	LCD_pulse_ENA( );                                    // latch HIGH NIBBLE
 
-   LCD_PORT->ODR   &= ~( LCD_DATA_BITS );               // isolate cmd bits
-   LCD_PORT->ODR   |= ( command & LCD_DATA_BITS );      // LOW nibble
-   delay_us( 100 );
-   LCD_pulse_ENA( );                                    // latch LOW NIBBLE
+	LCD_PORT->ODR   &= ~( LCD_DATA_BITS );               // isolate cmd bits
+	LCD_PORT->ODR   |= ( command & LCD_DATA_BITS );      // LOW nibble
+	delay_us( 100 );
+	LCD_pulse_ENA( );                                    // latch LOW NIBBLE
 }
 
 void LCD_write_char( uint8_t letter )  { //0x41 is A
-// calls LCD_command() w/char data; assumes all ctrl bits set LO in LCD_init()
-   LCD_PORT->ODR   |= (LCD_RS);       // RS = HI for data to address
-   delay_us( 100 );
-   LCD_command( letter );             // character to print
-   LCD_PORT->ODR   &= ~(LCD_RS);      // RS = LO
-   delay_us( 50 );
+	// calls LCD_command() w/char data
+	LCD_PORT->ODR   |= (LCD_RS);       // RS = HI for data to address
+	delay_us( 100 );
+	LCD_command( letter );             // character to print
+	LCD_PORT->ODR   &= ~(LCD_RS);      // RS = LO
+	delay_us( 100 );
 }
 
 void LCD_write_string( uint8_t sentence[] ) {
-// extracts each character fron a string and passes it to LCD_command()
-	LCD_PORT->ODR	|=	(LCD_RS);	// RS = HI for data to address
-	delay_us( 100 );
-	uint16_t len = strlen(sentence);
-	for ( uint16_t i = 0 ; i < len ; i++ ) {
-		LCD_write_char( sentence[i] );	//Write each character to LCD
+	// extracts each character from a string and passes it to LCD_write_char()
+	uint8_t len = strlen(sentence);
+	for ( uint8_t i = 0 ; i < len ; i++ ) {
+		LCD_write_char( sentence[i] );	// Write each character to LCD
 	}
-	LCD_PORT->ODR 	&= 	~(LCD_RS);	// RS = LO
-	delay_us( 50 );
-
 }
 
+
+void LCD_write_time( uint32_t totalSeconds ) {
+	// Takes seconds and outputs time on LCD (MM:SS). Prints right to left
+	// SPECIFIC TO LAB A3 TIMER LOCATION ON LCD
+	uint32_t minutes = totalSeconds / 60;
+	uint32_t seconds = totalSeconds % 60;
+	uint32_t time = (minutes * 100) + seconds;	// Decimal of the form: MMSS
+	LCD_command(CURSOR_LEFT);					// Cursor moves left
+	LCD_command(0x0C);							// Turn cursor blink off
+	LCD_command(0xCF);							// Cursor to last S in MM:SS
+	for ( uint8_t i = 0; i < 4 ; i++ ) {
+		LCD_write_char( (time % 10) + '0' );	// Print each M or S
+		if ( i == 1 ) LCD_write_char( ':' );	// Add colon between M/S
+		time /= 10;								// Next left digit
+	}
+}
+
+//Include if you want to hack the LCD (prints constant garbage)
+//void LCD_write_time( uint32_t totalSeconds ) {
+//	//Takes total seconds and outputs time on LCD
+//	uint32_t minutes = totalSeconds / 60;
+//	uint32_t seconds = totalSeconds % 60;
+//	uint32_t time = (minutes * 100) + seconds;	//MMSS
+//	LCD_command(0xCB);	//First M in MM:SS
+//	uint32_t digits[4];
+//	uint32_t i = 0;
+//	while (time > 0) {
+//		digits[i++] = time % 10;
+//		time /= 10;
+//	}
+//
+//	for (uint32_t j = i - 1; j >= 0; j--) {
+//		uint8_t digit_char = '0' + digits[j];
+//		LCD_write_char(digit_char);
+//		if (j == 2) LCD_write_char(':');
+//	}
+//	}

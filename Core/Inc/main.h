@@ -1,21 +1,20 @@
 /* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file           : main.h
-  * @brief          : Header for main.c file.
-  *                   This file contains the common defines of the application.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2024 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+/*******************************************************************************
+ * EE 329 A3 Parallel LCD
+ *******************************************************************************
+ * @file           : main.h
+ * @brief          : Use keypad to enter and display countdown on Parallel LCD
+ * project         : EE 329 S'24 Assignment 3
+ * authors         : Bradley Buzzini - Logan Tom
+ * version         : 0.3
+ * date            : 240424
+ * compiler        : STM32CubeIDE v.1.15.0 Build: 20695_20240315_1429 (UTC)
+ * target          : NUCLEO-L496ZG
+ * clocks          : 4 MHz MSI to AHB2
+ * @attention      : (c) 2024 STMicroelectronics.  All rights reserved.
+ *******************************************************************************
+ * See main.c for more details
+ *
 /* USER CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
